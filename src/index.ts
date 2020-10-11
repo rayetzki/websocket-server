@@ -1,5 +1,5 @@
-import * as http from "http";
-import * as stream from 'stream';
+import { createServer, IncomingMessage } from "http";
+import { Duplex } from 'stream';
 import { createHash } from 'crypto';
 
 interface DecryptedMessage {
@@ -9,7 +9,6 @@ interface DecryptedMessage {
 }
 
 export class SockerServer {
-    private connections: Set<stream.Duplex> = new Set();
     private HANDSHAKE_CONSTANT: string = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
     private MASK_LENGTH: number = 4;
     private OPCODE = {
@@ -25,11 +24,11 @@ export class SockerServer {
     private CONTROL_MESSAGES = {
         PING: Buffer.from([this.OPCODE.PING, 0x0])
     };
+    private connections: Set<Duplex> = new Set();
     
     constructor(private port: number, private heartbeatTimeout: number) {
-        http
-            .createServer()
-            .on('upgrade', (request: http.IncomingMessage, socket: stream.Duplex) => { 
+        createServer()
+            .on('upgrade', (request: IncomingMessage, socket: Duplex) => { 
                 this.initiateHandshake(request, socket);
                 this.connections.add(socket);
                 this.dataListener(socket);
@@ -40,7 +39,7 @@ export class SockerServer {
         console.log(`Listening on port: ${this.port}`);
     }
 
-    private initiateHandshake(request: http.IncomingMessage, socket: stream.Duplex): void {
+    private initiateHandshake(request: IncomingMessage, socket: Duplex): void {
         const clientKey: string = request.headers['sec-websocket-key'] as string;
         const handshakeKey = createHash('sha1')
             .update(clientKey.concat(this.HANDSHAKE_CONSTANT))
@@ -57,10 +56,9 @@ export class SockerServer {
         socket.write(responseHeaders.join('\r\n'));
     }
 
-    private deleteSocketOnTimeout(socket: stream.Duplex, heartbeatTimeout: number): void {
+    private deleteSocketOnTimeout(socket: Duplex, heartbeatTimeout: number): void {
         const id: NodeJS.Timeout = setInterval(() => socket.write(this.CONTROL_MESSAGES.PING), heartbeatTimeout);
         const events = ['end', 'close', 'error'] as const;
-
         events.forEach(event => {
             socket.once(event, () => {
                 console.log(`Socket terminated due to connection: ${event}`)
@@ -93,12 +91,12 @@ export class SockerServer {
         } else throw new Error('Wrong message format');
     }
 
-    private dataListener(socket: stream.Duplex): void {
+    private dataListener(socket: Duplex): void {
         socket.on('data', (data: Buffer) => {
             if (data[0] === this.OPCODE.SHORT_TEXT_MESSAGE) {
                 const meta: DecryptedMessage = this.decryptMessage(data);
                 const message: Buffer = this.unmasked(meta.mask, meta.data);
-                this.connections.forEach((socket: stream.Duplex) => {
+                this.connections.forEach((socket: Duplex) => {
                     this.sendMessage(message, socket);
                 });
             }
@@ -109,7 +107,7 @@ export class SockerServer {
         return Buffer.from(data.map((byte, index) => byte ^ mask[index % this.MASK_LENGTH]));
     }
 
-    private sendMessage(message: Buffer, socket: stream.Duplex): void {
+    private sendMessage(message: Buffer, socket: Duplex): void {
         const meta: Buffer = Buffer.alloc(2);
         meta[0] = this.OPCODE.SHORT_TEXT_MESSAGE;
         meta[1] = message.length;
