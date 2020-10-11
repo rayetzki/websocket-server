@@ -1,21 +1,20 @@
 {
-  "name": "node-tcp-server",
+  "name": "websocket-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Websocket server on plain Node without dependencies",
   "main": "index.js",
   "scripts": {
     "start": "nodemon"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/rayetzki/node-tcp-server.git"
+    "url": "https://github.com/rayetzki/websocket-server.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^13.9.0",
-    "@types/workerpool": "^5.0.1",
     "nodemon": "^2.0.2",
     "ts-node": "^8.6.2",
     "typescript": "^3.8.3"
