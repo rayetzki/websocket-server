@@ -30,12 +30,12 @@ export class SockerServer {
         http
             .createServer()
             .on('upgrade', (request: http.IncomingMessage, socket: stream.Duplex) => { 
-                this.initiateHandshake(request, socket);   
+                this.initiateHandshake(request, socket);
+                this.connections.add(socket);
                 this.dataListener(socket);
                 this.deleteSocketOnTimeout(socket, this.heartbeatTimeout);
-                this.notifyAllSockets(`Подключился новый участник, теперь нас всего: ${this.connections.size}`);
-            })
-            .listen(this.port);
+                this.notifyAllSockets(`Подключился новый участник чата. Всего в чате: ${this.connections.size}`);
+            }).listen(this.port);
 
         console.log(`Listening on port: ${this.port}`);
     }
@@ -55,7 +55,6 @@ export class SockerServer {
         ];
 
         socket.write(responseHeaders.join('\r\n'));
-        this.connections.add(socket);
     }
 
     private deleteSocketOnTimeout(socket: stream.Duplex, heartbeatTimeout: number): void {
@@ -73,41 +72,36 @@ export class SockerServer {
 
     private decryptMessage(message: Buffer): DecryptedMessage {
         const length: number = message[1] ^ this.DATA_LENGTH.MIDDLE;
-
         if (length <= this.DATA_LENGTH.SHORT) {
             return {
                 length,
                 mask: message.slice(2, 6),
                 data: message.slice(6)
             }
-        }
-        
-        if (length === this.DATA_LENGTH.LONG) {
+        } else if (length === this.DATA_LENGTH.LONG) {
             return {
                 length: message.slice(2, 4).readInt16BE(),
                 mask: message.slice(4, 8),
                 data: message.slice(8)
             }
-        }
-        
-        if (length === this.DATA_LENGTH.VERY_LONG) {
+        } else if (length === this.DATA_LENGTH.VERY_LONG) {
             return {
                 length: message.slice(2, 10).readBigInt64BE(),
                 mask: message.slice(10, 14),
                 data: message.slice(14)
             };
-        }
-        
-        throw new Error('Wrong message format');
+        } else throw new Error('Wrong message format');
     }
 
     private dataListener(socket: stream.Duplex): void {
         socket.on('data', (data: Buffer) => {
             if (data[0] === this.OPCODE.SHORT_TEXT_MESSAGE) {
                 const meta: DecryptedMessage = this.decryptMessage(data);
-                const message: Buffer = this.unmasked(meta.mask, data);
-                this.connections.forEach(socket => this.sendMessage(message, socket));
-            };
+                const message: Buffer = this.unmasked(meta.mask, meta.data);
+                this.connections.forEach((socket: stream.Duplex) => {
+                    this.sendMessage(message, socket);
+                });
+            }
         });
     }
 
@@ -124,10 +118,8 @@ export class SockerServer {
 
     private notifyAllSockets(message: string): void {
         this.connections.forEach(socket => {
-            this.sendMessage(
-                Buffer.from(message), 
-                socket
-            );
+            this.sendMessage(Buffer.from(message), socket);
+            console.log(message);
         });
     }
 }
